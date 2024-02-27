@@ -9,7 +9,7 @@ from torchvision import transforms, models, datasets
 from data_loader.ImageNet_datasets import ImageNetData
 import model.resnet_cbam as resnet_cbam
 from trainer.trainer import Trainer
-from utils.logger import Logger
+from utilss.logger import Logger
 from PIL import Image
 from torchnet.meter import ClassErrorMeter,MSEMeter
 from tensorboardX import SummaryWriter
