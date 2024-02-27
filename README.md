@@ -32,7 +32,7 @@ data
     └── test
 ```
 
-### Loss Functions Experiment Reproduction
+### Loss Functions
 
 ```python
 # Train
@@ -55,7 +55,7 @@ parser.add_argument('--batch_size', default=32,
 
 
 
-### Referenced Technology
+### Technology
 
 * [Label-Distribution-Aware Margin Loss](https://github.com/kaidic/LDAM-DRW)
 
