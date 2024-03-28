@@ -23,16 +23,7 @@ def conv3x3(in_planes, out_planes, stride=1):
     "3x3 convolution with padding"
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
                      padding=1, bias=False)
-class NormedLinear(nn.Module):
 
-    def __init__(self, in_features, out_features):
-        super(NormedLinear, self).__init__()
-        self.weight = Parameter(torch.Tensor(in_features, out_features))
-        self.weight.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)
-
-    def forward(self, x):
-        out = (F.normalize(x, dim=1)).mm(F.normalize(self.weight, dim=0))
-        return out
 class ChannelAttention(nn.Module):
     def __init__(self, in_planes, ratio=16):
         super(ChannelAttention, self).__init__()
@@ -151,7 +142,7 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000):
+    def __init__(self, block, layers, args,num_classes=2,age_classes=103):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
@@ -165,8 +156,8 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        self.fc_age = nn.Linear(512 * block.expansion, 110)
-
+        self.fc_age = nn.Linear(512 * block.expansion, age_classes)
+        self.args = args
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -204,10 +195,16 @@ class ResNet(nn.Module):
         x = self.layer4(x)
 
         x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        sex = self.fc(x)
-        age = self.fc_age(x)
-
+        fea = x.view(x.size(0), -1)
+        normal_fea = F.normalize(fea, dim=1)
+        if self.args.sex_loss_function == "CE" or self.args.sex_loss_function == "Focal":
+            sex = self.fc(fea)
+        elif self.args.sex_loss_function == "LDAM" or self.args.sex_loss_function == "LogitAdjust":
+            sex = self.fc(normal_fea)
+        if self.args.age_loss_function == "CE" or self.args.age_loss_function == "Focal":
+            age = self.fc_age(fea)
+        elif self.args.age_loss_function == "LDAM" or self.args.age_loss_function == "LogitAdjust":
+            age = self.fc_age(normal_fea)
         return sex,age
 
 
@@ -256,25 +253,35 @@ def resnet50_cbam(pretrained=False, **kwargs):
     return model
 
 
-class MyResNet50(nn.Module):
-    def __init__(self, pretrained=True,num_classes=2):
+class MyResNet(nn.Module):
+    def __init__(self, args,pretrained=True,num_classes=2,age_classes=103,resnet_type='resnet50'):
         super().__init__()
-
-        resnet50 = torchvision.models.resnet50(pretrained=pretrained)
-        self.features = nn.ModuleList(resnet50.children())[:-1]
+        if resnet_type == 'resnet50':
+            resnet = torchvision.models.resnet50(pretrained=pretrained)
+        elif resnet_type == 'resnet18':
+            resnet = torchvision.models.resnet18(pretrained=pretrained)
+        self.features = nn.ModuleList(resnet.children())[:-1]
         self.features = nn.Sequential(*self.features)
 
-        n_inputs = resnet50.fc.in_features
+        n_inputs = resnet.fc.in_features
         self.fc = nn.Linear(n_inputs, num_classes)
-        self.fc_age = nn.Linear(n_inputs, 110)
+        self.fc_age = nn.Linear(n_inputs, age_classes)
+        self.args = args
 
     def forward(self, input_imgs):
         features = self.features(input_imgs)
         out = F.relu(features, inplace=True)
         out = F.adaptive_avg_pool2d(out, (1, 1))
-        out = torch.flatten(out, 1)
-        sex = self.fc(out)
-        age = self.fc_age(out)
+        fea = torch.flatten(out, 1)
+        normal_fea = F.normalize(fea, dim=1)
+        if self.args.sex_loss_function == "CE" or self.args.sex_loss_function == "Focal":
+            sex = self.fc(fea)
+        elif self.args.sex_loss_function == "LDAM" or self.args.sex_loss_function == "LogitAdjust":
+            sex = self.fc(normal_fea)
+        if self.args.age_loss_function == "CE" or self.args.age_loss_function == "Focal":
+            age = self.fc_age(fea)
+        elif self.args.age_loss_function == "LDAM" or self.args.age_loss_function == "LogitAdjust":
+            age = self.fc_age(normal_fea)
 
         return sex,age
 
