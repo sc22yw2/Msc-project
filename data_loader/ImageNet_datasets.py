@@ -22,36 +22,61 @@ def default_loader(path):
         return pil_loader(path)
 
 class ImageNetData(data.Dataset):
-    def __init__(self, img_root, img_file,  transform=None, loader=default_loader):
-        self.root = img_root
+    def __init__(self, data_name, img_file,  transform=None, loader=default_loader):
 
-        self.imgs = glob(os.path.join(img_root,img_file,"*.jpg"))
+        if data_name == "UTKFace":
+            img_root = 'data/UTKFace'
+            self.root = img_root
+            self.imgs = glob(os.path.join(img_root, img_file, "*.jpg"))
+        elif data_name == "imdb":
+            img_root = 'data/imdb/imdb'
+            self.root = img_root
+            self.imgs = glob(os.path.join(img_root, img_file, "*.jpg"))
+            print("select 10% images")
+            num_to_select = round(len(self.imgs) * 0.1)
+            self.imgs = random.sample(self.imgs, num_to_select)
+
 
         
         self.transform = transform
         self.loader = loader
         self.get_min_max_age()
-        age_cls_num_list = {}
-        sex_cls_num_list = {}
+        age_cls_num_dict = {}
+        sex_cls_num_dict = {}
         for path in self.imgs:
             basename = os.path.basename(path)
             age = basename.split("_")[0]
             sex = basename.split("_")[1]
             if sex == "3":
                 print(path)
-            if age not in age_cls_num_list:
-                age_cls_num_list[age] = 1
+            if age not in age_cls_num_dict:
+                age_cls_num_dict[age] = 1
             else:
-                age_cls_num_list[age] += 1
-            if sex not in sex_cls_num_list:
-                sex_cls_num_list[sex] = 1
+                age_cls_num_dict[age] += 1
+            if sex not in sex_cls_num_dict:
+                sex_cls_num_dict[sex] = 1
             else:
-                sex_cls_num_list[sex] += 1
+                sex_cls_num_dict[sex] += 1
 
-        if "3" in sex_cls_num_list:
-            del sex_cls_num_list["3"]
+        if "3" in sex_cls_num_dict:
+            del sex_cls_num_dict["3"]
+        age_cls_num_list = []
+        for i in range(0,120):
+            i = str(i)
+            if i not in age_cls_num_dict:
+                age_cls_num_list.append(0)
+            else:
+                age_cls_num_list.append(age_cls_num_dict[i])
+        sex_cls_num_list = []
+        for i in range(0,2):
+            i = str(i)
+            if i not in sex_cls_num_dict:
+                sex_cls_num_list.append(0)
+            else:
+                sex_cls_num_list.append(sex_cls_num_dict[i])
 
-        self.cls_num = {"age_cls_num_list":list(age_cls_num_list.values()),"sex_cls_num_list":list(sex_cls_num_list.values())}
+
+        self.cls_num = {"age_cls_num_list":age_cls_num_list,"sex_cls_num_list":sex_cls_num_list}
 
     def get_min_max_age(self):
         ages = set()
@@ -79,8 +104,8 @@ class ImageNetData(data.Dataset):
             print(path)
         if sex_ not in [0,1]:
             sex_ = 1
-        if age_ >= 110:
-            age_ =109
+        if age_ >= 120:
+            age_ =119
 
 
 
