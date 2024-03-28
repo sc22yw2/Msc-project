@@ -1,64 +1,32 @@
-# Age and Gender Recognition with CBAM-CNN Multi-Task Learning Model
+# CBAM.PyTorch
+Non-official implement of Paper：CBAM: Convolutional Block Attention Module
 
-### Requirements
+## Introduction
+The codes are [PyTorch](https://pytorch.org/) re-implement version for paper: CBAM: Convolutional Block Attention Module
 
-The "requirements.txt" file required to configure the environment is in the folder of the corresponding method.
+> Woo S, Park J, Lee J Y, et al. CBAM: Convolutional Block Attention Module[J]. 2018. [ECCV2018](http://openaccess.thecvf.com/content_ECCV_2018/papers/Sanghyun_Woo_Convolutional_Block_Attention_ECCV_2018_paper.pdf)
 
-```
-pip install -r requirements.txt
-```
+## Structure
 
+The overview of CBAM. The module has two sequential sub-modules:
+channel and spatial. The intermediate feature map is adaptively refined through
+our module (CBAM) at every convolutional block of deep networks.
 
+![1](imgs/01.png)
 
-### Datasets
+## Requirements
+- Python3
+- PyTorch 0.4.1
+- tensorboardX (optional)
+- torchnet
+- pretrainedmodels (optional)
 
-[UTKFace](https://susanqq.github.io/UTKFace/)
+## Results
+We just test four models in ImageNet-1K, both train set and val set are scaled to 256(minimal side), only use **Mirror** and **RandomResizeCrop** as training data augmentation, during validation, we use center crop to get 224x224 patch.
 
-```
-@inproceedings{zhifei2017cvpr,
-  title={Age Progression/Regression by Conditional Adversarial Autoencoder},
-  author={Zhang, Zhifei, Song, Yang, and Qi, Hairong},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-  year={2017},
-  organization={IEEE}
-}
-```
+### ImageNet-1K
 
-```
-data
-└──UTKFace
-    ├── train
-    ├── val
-    └── test
-```
-
-### Loss Functions
-
-```python
-# Train
-# the data path
-parser.add_argument('-d', '--data_root', default='./data',
-                         type=str, help='data root')
-# sex branch loss
-parser.add_argument('-sex_loss', '--sex_loss_function', default='CE',
-                        type=str, choices=['CE', 'LDAM','Focal','LogitAdjust'],help='loss function')
-# age branch loss
-parser.add_argument('-age_loss', '--age_loss_function', default='CE',
-                        type=str, choices=['CE', 'LDAM', 'Focal', 'LogitAdjust'], help='loss function')
-# model
-parser.add_argument('-m', '--model', default='resnet50-cbam',
-                         type=str, help='resnet50-cbam or resnet50')
-# mini batch size
-parser.add_argument('--batch_size', default=32,
-                         type=int, help='model train batch size')
-```
-
-
-
-### Technology
-
-* [Label-Distribution-Aware Margin Loss](https://github.com/kaidic/LDAM-DRW)
-
-* [Focal Loss](https://github.com/clcarwin/focal_loss_pytorch/)
-* [Logit Adjustment Loss](https://github.com/FlamieZhu/Balanced-Contrastive-Learning)
-* [ResNet](https://github.com/labmlai/annotated_deep_learning_paper_implementations)
+Models         | validation(Top-1) | validation(Top-5) |
+-------------  | ----------------- | ----------------- |
+ResNet50       | 74.26             | 91.91             |
+ResNet50-CBAM  | 75.45             | 92.55             |

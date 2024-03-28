@@ -16,15 +16,11 @@ from tensorboardX import SummaryWriter
 import torch.backends.cudnn as cudnn
 import wandb
 from losses import LDAMLoss,LogitAdjust,FocalLoss
-import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
-def loss_combination(sex_loss, age_loss,cls_num):
-    age_cls_num = cls_num["age_cls_num_list"]
-    sex_cls_num = cls_num["sex_cls_num_list"]
-    age_loss_dict = {'CE':nn.CrossEntropyLoss(), 'LDAM':LDAMLoss(cls_num_list=age_cls_num), 'Focal':FocalLoss(class_num=age_cls_num), 'LogitAdjust':LogitAdjust(cls_num_list=age_cls_num)}
-    sex_loss_dict = {'CE':nn.CrossEntropyLoss(), 'LDAM':LDAMLoss(cls_num_list=sex_cls_num), 'Focal':FocalLoss(class_num=sex_cls_num), 'LogitAdjust':LogitAdjust(cls_num_list=sex_cls_num)}
-    return [sex_loss_dict[sex_loss],age_loss_dict[age_loss]]
+
+def loss_combination(sex_loss, age_loss):
+    loss_dict = {'CE':nn.CrossEntropyLoss(), 'LDAM':LDAMLoss(), 'Focal':FocalLoss(), 'LogitAdjust':LogitAdjust()}
+    return [loss_dict[sex_loss],loss_dict[age_loss]]
 
 
 
@@ -75,12 +71,10 @@ def main(args):
         ])
     }
 
-    train_datasets = ImageNetData(data_name=args.data_name,img_file='train', transform= data_transforms['train'])
-    val_datasets   = ImageNetData(data_name=args.data_name,img_file='test',  transform=data_transforms['val'])
+    train_datasets = ImageNetData(img_root=args.data_root,img_file='train', transform= data_transforms['train'])
+    val_datasets   = ImageNetData(img_root=args.data_root,img_file='test',  transform=data_transforms['val'])
     train_dataloaders = torch.utils.data.DataLoader(train_datasets, batch_size=args.batch_size*len(gpus), drop_last=True, shuffle=True, num_workers=4)
     val_dataloaders   = torch.utils.data.DataLoader(val_datasets, batch_size=args.batch_size, shuffle=False, num_workers=4)
-
-
 
     if args.debug:
         x, y =next(iter(train_dataloaders))
@@ -91,11 +85,9 @@ def main(args):
     cudnn.benchmark = True
 
     if  'resnet50' == args.model.split('_')[0]:
-        my_model = resnet_cbam.MyResNet(pretrained=False,num_classes=2,args=args,age_classes=120,resnet_type='resnet50')
-    elif  'resnet18' == args.model.split('_')[0]:
-        my_model = resnet_cbam.MyResNet(pretrained=False,num_classes=2,args=args,age_classes=120,resnet_type='resnet18')
+        my_model = resnet_cbam.MyResNet50(pretrained=False,num_classes=2,args=args)
     elif 'resnet50-cbam' == args.model.split('_')[0]:
-        my_model = resnet_cbam.resnet50_cbam(pretrained=False,num_classes=2,args=args,age_classes=120)
+        my_model = resnet_cbam.resnet50_cbam(pretrained=False,num_classes=2,args=args)
 
     else:
         raise ModuleNotFoundError
@@ -108,16 +100,16 @@ def main(args):
         my_model = nn.DataParallel(my_model.cuda())
 
     # loss_fn = [nn.CrossEntropyLoss(),nn.CrossEntropyLoss()]
-    loss_fn = loss_combination(args.sex_loss_function, args.age_loss_function,train_datasets.cls_num)
+    loss_fn = loss_combination(args.sex_loss_function, args.age_loss_function)
     optimizer = optim.AdamW(my_model.parameters(), lr=1e-4, weight_decay=1e-4)
     lr_schedule = lr_scheduler.MultiStepLR(optimizer, milestones=[30, 60], gamma=0.1)           #
 
-    metric = [ClassErrorMeter([1], True),MSEMeter(),ClassErrorMeter([1], True)]
+    metric = [ClassErrorMeter([1], True),MSEMeter()]
     start_epoch = 0
-    num_epochs  = 60
+    num_epochs  = 90
 
-    my_trainer = Trainer(my_model, args.model, loss_fn, optimizer, lr_schedule, 500, is_use_cuda, train_dataloaders \
-                        ,args, val_dataloaders, metric, start_epoch, num_epochs, args.debug, logger, writer)
+    my_trainer = Trainer(my_model, args.model, loss_fn, optimizer, lr_schedule, 500, is_use_cuda, train_dataloaders, \
+                        val_dataloaders, metric, start_epoch, num_epochs, args.debug, logger, writer)
     my_trainer.fit()
     logger.append('Optimize Done!')
 
@@ -131,23 +123,21 @@ if __name__ == '__main__':
                         help='trainer debug flag')
     parser.add_argument('-g', '--gpu', default='0', type=str,
                         help='GPU ID Select')                    
-    parser.add_argument('-d', '--data_name', default='imdb',
-                         type=str, help='UTKFace or imdb')
+    parser.add_argument('-d', '--data_root', default='./data',
+                         type=str, help='data root')
     parser.add_argument('-sex_loss', '--sex_loss_function', default='CE',
                         type=str, choices=['CE', 'LDAM','Focal','LogitAdjust'],help='loss function')
-    parser.add_argument('-age_loss', '--age_loss_function', default='Focal',
+    parser.add_argument('-age_loss', '--age_loss_function', default='CE',
                         type=str, choices=['CE', 'LDAM', 'Focal', 'LogitAdjust'], help='loss function')
-    parser.add_argument('-m', '--model', default='resnet18',
-                         type=str, help='resnet50-cbam or resnet50 or resnet18')
-    parser.add_argument('--batch_size', default=16,
+    parser.add_argument('-m', '--model', default='resnet50-cbam',
+                         type=str, help='resnet50-cbam or resnet50')
+    parser.add_argument('--batch_size', default=32,
                          type=int, help='model train batch size')
     parser.add_argument('--display', action='store_true', dest='display',
                         help='Use TensorboardX to Display')
 
     args = parser.parse_args()
-    wandb_name = str(args.model)+'_sex_'+str(args.sex_loss_function)+'_age_'+str(args.age_loss_function)
-
     wandb.init(dir=os.path.abspath("wandb"),config=args,
                project="CBAM",
-               name=wandb_name,)
+               name=args.model,)
     main(args)
