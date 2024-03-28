@@ -12,7 +12,7 @@ from utils import utils
 
 
 class Trainer():
-    def __init__(self, model, model_type, loss_fn, optimizer, lr_schedule, log_batchs, is_use_cuda, train_data_loader, \
+    def __init__(self, model, model_type, loss_fn, optimizer, lr_schedule, log_batchs, is_use_cuda, train_data_loader,args, \
                 valid_data_loader=None, metric=None, start_epoch=0, num_epochs=25, is_debug=False, logger=None, writer=None):
         self.model = model
         self.model_type = model_type
@@ -34,6 +34,7 @@ class Trainer():
         self.logger = logger
         self.writer = writer
         self.wandb_dict = {}
+        self.args=args
     def fit(self):
         for epoch in range(0, self.start_epoch):
             self.lr_schedule.step()
@@ -67,6 +68,7 @@ class Trainer():
         if self.metric is not None:
             self.metric[0].reset()
             self.metric[1].reset()
+            self.metric[2].reset()
 
         for i, (inputs, age,sex) in enumerate(tqdm(self.train_data_loader)):              # Notice
 
@@ -81,6 +83,7 @@ class Trainer():
 
             self.optimizer.zero_grad()
             pred_sex,pred_age = self.model(inputs)            # Notice
+
             loss = self.loss_fn[0](pred_sex, sex)
             loss += self.loss_fn[1](pred_age,age)
             if self.metric is not None:
@@ -88,6 +91,7 @@ class Trainer():
                 predicted_probability, predicted = torch.max(pred_age, 1)
                 self.metric[0].add(prob_sex, sex.data.cpu())
                 self.metric[1].add(predicted.data.cpu(),age.data.cpu())
+                self.metric[2].add(pred_age.data.cpu(),age.data.cpu())
 
             loss.backward()
 
@@ -104,13 +108,16 @@ class Trainer():
                 if i == len(self.train_data_loader) - 1 and self.metric is not None:
                     top1_acc_score = self.metric[0].value()[0]
                     age_mean_score = self.metric[1].value().item()
+                    age_acc_score = self.metric[2].value()[0]
                     print_str += '@Top-1 Score: %.4f\t\n' % (top1_acc_score)
                     print_str += '@age_mean Score: %.4f\t' % (age_mean_score)
+                    print_str += '@age_acc Score: %.4f\t' % (age_acc_score)
 
                 self.logger.append(print_str)
         self.wandb_dict['loss'] = batch_mean_loss
         self.wandb_dict['top1_acc_score'] = top1_acc_score
         self.wandb_dict['age_mse'] = age_mean_score
+        self.wandb_dict['age_acc'] = age_acc_score
         wandb.log(utils.add_prefix(self.wandb_dict, f'train'), step=self.cur_epoch, commit=False)
 
         # self.writer.add_scalar('loss/loss_c', batch_mean_loss, self.cur_epoch)
@@ -122,6 +129,7 @@ class Trainer():
         if self.metric is not None:
             self.metric[0].reset()
             self.metric[1].reset()
+            self.metric[2].reset()
 
         with torch.no_grad():              # Notice
             for i, (inputs, age,sex) in enumerate(tqdm(self.valid_data_loader)):
@@ -144,7 +152,7 @@ class Trainer():
                     predicted_probability, predicted = torch.max(pred_age, 1)
                     self.metric[0].add(prob_sex, sex.data.cpu())
                     self.metric[1].add(predicted.data.cpu(), age.data.cpu())
-
+                    self.metric[2].add(pred_age.data.cpu(), age.data.cpu())
                 losses.append(loss.item())
             
         local_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
@@ -155,8 +163,10 @@ class Trainer():
         if  self.metric is not None:
             top1_acc_score = self.metric[0].value()[0]
             age_mean_score = self.metric[1].value().item()
+            age_acc_score = self.metric[2].value()[0]
             print_str += '@Top-1 Score: %.4f\t\n' % (top1_acc_score)
             print_str += '@age_mean Score: %.4f\t' % (age_mean_score)
+            print_str += '@age_acc Score: %.4f\t' % (age_acc_score)
         self.logger.append(print_str)
         if top1_acc_score >= self.best_acc:
             self.best_acc = top1_acc_score
@@ -164,6 +174,7 @@ class Trainer():
         self.wandb_dict['loss'] = batch_mean_loss
         self.wandb_dict['top1_acc_score'] = top1_acc_score
         self.wandb_dict['age_mse'] = age_mean_score
+        self.wandb_dict['age_acc'] = age_acc_score
         wandb.log(utils.add_prefix(self.wandb_dict, f'val'), step=self.cur_epoch, commit=True)
 
     def _save_best_model(self):
